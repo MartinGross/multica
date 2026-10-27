@@ -728,6 +728,39 @@ func TestLoadConfig_CodexHandshakeTimeout(t *testing.T) {
 	}
 }
 
+func TestLoadConfig_ClaudePermissionMode(t *testing.T) {
+	stageFakeAgent(t)
+	load := func() (Config, error) {
+		return LoadConfig(Overrides{
+			ServerURL:      "http://localhost:8080",
+			WorkspacesRoot: t.TempDir(),
+		})
+	}
+
+	t.Setenv("MULTICA_CLAUDE_PERMISSION_MODE", "")
+	cfg, err := load()
+	if err != nil {
+		t.Fatalf("LoadConfig with default: %v", err)
+	}
+	if cfg.ClaudePermissionMode != "" {
+		t.Fatalf("ClaudePermissionMode = %q, want empty default", cfg.ClaudePermissionMode)
+	}
+
+	t.Setenv("MULTICA_CLAUDE_PERMISSION_MODE", " auto ")
+	cfg, err = load()
+	if err != nil {
+		t.Fatalf("LoadConfig with auto: %v", err)
+	}
+	if cfg.ClaudePermissionMode != "auto" {
+		t.Fatalf("ClaudePermissionMode = %q, want auto", cfg.ClaudePermissionMode)
+	}
+
+	t.Setenv("MULTICA_CLAUDE_PERMISSION_MODE", "default")
+	if _, err := load(); err == nil {
+		t.Fatal("LoadConfig accepted a permission mode that needs an approval UI")
+	}
+}
+
 func TestLoadConfig_CodexTurnInterruptTimeout(t *testing.T) {
 	stageFakeAgent(t)
 	t.Setenv("MULTICA_CODEX_TURN_INTERRUPT_TIMEOUT", "750ms")

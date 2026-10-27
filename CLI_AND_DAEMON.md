@@ -373,6 +373,7 @@ Agent-specific overrides:
 | `MULTICA_CLAUDE_PATH` | Custom path to the `claude` binary |
 | `MULTICA_CLAUDE_MODEL` | Override the Claude model used |
 | `MULTICA_CLAUDE_ARGS` | Default extra arguments for Claude Code runs |
+| `MULTICA_CLAUDE_PERMISSION_MODE` | Claude Code `--permission-mode` for daemon runs: `bypassPermissions` (default) or `auto` |
 | `MULTICA_ANTIGRAVITY_PATH` | Custom path to the `agy` binary |
 | `MULTICA_ANTIGRAVITY_MODEL` | Override the Antigravity model used |
 | `MULTICA_CODEBUDDY_PATH` | Custom path to the `codebuddy` binary |

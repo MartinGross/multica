@@ -1064,7 +1064,7 @@ var claudeBlockedArgs = map[string]blockedArgMode{
 	"-p":                blockedStandalone, // non-interactive mode
 	"--output-format":   blockedWithValue,  // stream-json protocol
 	"--input-format":    blockedWithValue,  // stream-json protocol
-	"--permission-mode": blockedWithValue,  // bypassPermissions for autonomous operation
+	"--permission-mode": blockedWithValue,  // daemon-owned via ExecOptions.ClaudePermissionMode
 	"--mcp-config":      blockedWithValue,  // set by daemon from agent.mcp_config
 	// `--effort` is owned by the per-agent thinking_level picker so a
 	// user-supplied custom_arg cannot silently outvote it. The daemon
@@ -1076,12 +1076,16 @@ var claudeBlockedArgs = map[string]blockedArgMode{
 }
 
 func buildClaudeArgs(opts ExecOptions, logger *slog.Logger) []string {
+	permissionMode := opts.ClaudePermissionMode
+	if permissionMode == "" {
+		permissionMode = "bypassPermissions"
+	}
 	args := []string{
 		"-p",
 		"--output-format", "stream-json",
 		"--input-format", "stream-json",
 		"--verbose",
-		"--permission-mode", "bypassPermissions",
+		"--permission-mode", permissionMode,
 		// AskUserQuestion is Claude Code's built-in interactive question tool.
 		// The daemon runs Claude in non-interactive stream-json mode and has
 		// no UI for the prompt to render in, so a call returns an empty

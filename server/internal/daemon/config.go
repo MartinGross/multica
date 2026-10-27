@@ -154,6 +154,7 @@ type Config struct {
 	AgentIdleWatchdog           time.Duration // force-stop a run when the backend goes silent this long with an empty queue (0 = disabled)
 	AgentToolWatchdog           time.Duration // force-stop a run when a single tool call stays in flight (silent) this long (0 = never force-stop during a tool call, which now also covers a live Cursor background shell); defaults to AgentIdleWatchdog, so operators tune one number unless they deliberately want a wider tool budget
 	ClaudeArgs                  []string
+	ClaudePermissionMode        string // Claude Code --permission-mode; empty means the backend default (bypassPermissions)
 	CodexArgs                   []string
 	CodebuddyArgs               []string
 	QwenArgs                    []string
@@ -270,6 +271,10 @@ func LoadConfig(overrides Overrides) (Config, error) {
 	}
 
 	claudeArgs, err := shellArgsFromEnv("MULTICA_CLAUDE_ARGS")
+	if err != nil {
+		return Config{}, err
+	}
+	claudePermissionMode, err := claudePermissionModeFromEnv()
 	if err != nil {
 		return Config{}, err
 	}
@@ -664,6 +669,7 @@ func LoadConfig(overrides Overrides) (Config, error) {
 		AgentIdleWatchdog:               agentIdleWatchdog,
 		AgentToolWatchdog:               agentToolWatchdog,
 		ClaudeArgs:                      claudeArgs,
+		ClaudePermissionMode:            claudePermissionMode,
 		CodexArgs:                       codexArgs,
 		CodebuddyArgs:                   codebuddyArgs,
 		QwenArgs:                        qwenArgs,
@@ -819,6 +825,20 @@ func shellArgsFromEnv(name string) ([]string, error) {
 		return nil, fmt.Errorf("invalid %s: %w", name, err)
 	}
 	return args, nil
+}
+
+// claudePermissionModeFromEnv reads MULTICA_CLAUDE_PERMISSION_MODE. Only modes
+// that run headless without an approval UI are accepted: bypassPermissions
+// skips all checks, auto lets Claude Code's classifier deny risky actions.
+func claudePermissionModeFromEnv() (string, error) {
+	const name = "MULTICA_CLAUDE_PERMISSION_MODE"
+	mode := strings.TrimSpace(os.Getenv(name))
+	switch mode {
+	case "", "bypassPermissions", "auto":
+		return mode, nil
+	default:
+		return "", fmt.Errorf("invalid %s %q: want bypassPermissions or auto", name, mode)
+	}
 }
 
 // resolveAgentExecutablePath returns the executable entry point the daemon

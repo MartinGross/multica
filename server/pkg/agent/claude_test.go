@@ -340,6 +340,28 @@ func TestBuildClaudeArgsInheritsMCPByDefault(t *testing.T) {
 	}
 }
 
+func TestBuildClaudeArgsUsesConfiguredPermissionMode(t *testing.T) {
+	t.Parallel()
+
+	args := buildClaudeArgs(ExecOptions{
+		ClaudePermissionMode: "auto",
+		CustomArgs:           []string{"--permission-mode", "bypassPermissions"},
+	}, slog.Default())
+
+	var modes []string
+	for i, arg := range args {
+		if arg == "--permission-mode" && i+1 < len(args) {
+			modes = append(modes, args[i+1])
+		}
+	}
+	if len(modes) != 1 || modes[0] != "auto" {
+		t.Fatalf("expected a single --permission-mode auto, got %v in %v", modes, args)
+	}
+	if argsRequestBypassPermissions(args) {
+		t.Fatalf("auto mode must not trigger the bypassPermissions root preflight: %v", args)
+	}
+}
+
 func TestBuildClaudeArgsUsesStrictMCPForManagedConfig(t *testing.T) {
 	t.Parallel()
 

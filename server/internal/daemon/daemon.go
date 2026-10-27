@@ -8781,6 +8781,7 @@ func (d *Daemon) runTask(ctx context.Context, task Task, provider string, slot i
 		ServiceTier:            serviceTier,
 		OpenclawMode:           openclawMode,
 		ClaudeSettingsPath:     env.ClaudeSettingsPath,
+		ClaudePermissionMode:   d.cfg.ClaudePermissionMode,
 		QwenpawWorkspace:       env.QwenpawWorkspace,
 	}
 	// Some providers do not reliably load the per-task runtime config files we
