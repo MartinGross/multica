@@ -1042,6 +1042,26 @@ func TestBackendResumeContinuityNoticeSuppressedWhenPromptAlreadyHasIt(t *testin
 // poisoned prior session id (carried only on the first result) must never be
 // grafted onto the fresh retry's result, and a fresh retry that does not
 // establish a new session must not relabel the poisoned session as resumable.
+func TestWithPermissionModeLabel(t *testing.T) {
+	auto := Config{ClaudePermissionMode: "auto", CodexAutoReview: true}
+	cases := []struct {
+		cfg      Config
+		provider string
+		want     string
+	}{
+		{auto, "claude", "Claude · auto mode"},
+		{auto, "codex", "Codex · auto review"},
+		{auto, "pi", "Pi"},
+		{Config{ClaudePermissionMode: "bypassPermissions"}, "claude", "Claude"},
+		{Config{}, "codex", "Codex"},
+	}
+	for _, tc := range cases {
+		if got := withPermissionModeLabel(providerDisplayName(tc.provider), tc.cfg, tc.provider); got != tc.want {
+			t.Errorf("%s: got %q, want %q", tc.provider, got, tc.want)
+		}
+	}
+}
+
 func TestReconcileFreshRetryResultKeepsPermissionDenialsFromBothAttempts(t *testing.T) {
 	first := agent.Result{Status: "failed", PermissionDenials: []agent.PermissionDenial{{Tool: "Bash", Input: "first"}}}
 	retry := agent.Result{Status: "completed", SessionID: "sess", PermissionDenials: []agent.PermissionDenial{{Tool: "Bash", Input: "retry"}}}

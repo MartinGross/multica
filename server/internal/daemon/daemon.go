@@ -2791,7 +2791,7 @@ func (d *Daemon) detectBuiltinRuntimes(ctx context.Context) ([]map[string]string
 
 	runtimes := make([]map[string]string, 0, len(results))
 	for _, r := range results {
-		displayName := providerDisplayName(r.name)
+		displayName := withPermissionModeLabel(providerDisplayName(r.name), d.cfg, r.name)
 		if d.cfg.DeviceName != "" {
 			displayName = fmt.Sprintf("%s (%s)", displayName, d.cfg.DeviceName)
 		}
@@ -3123,6 +3123,9 @@ func (d *Daemon) appendProfileRuntimes(ctx context.Context, workspaceID string, 
 			version = ""
 		}
 		displayName := profile.DisplayName
+		if family, ok := agent.RuntimeProtocolFamily(runtimeType); ok {
+			displayName = withPermissionModeLabel(displayName, d.cfg, family)
+		}
 		if d.cfg.DeviceName != "" {
 			displayName = fmt.Sprintf("%s (%s)", displayName, d.cfg.DeviceName)
 		}
@@ -6484,6 +6487,21 @@ func init() {
 }
 
 // providerDisplayName returns the human-facing runtime name for a provider key.
+// withPermissionModeLabel marks a runtime name with the permission mode this
+// daemon runs the provider in, e.g. "Claude · auto mode", so the mode shows
+// wherever runtimes are listed without any server or UI change. Runtimes are
+// keyed by (workspace, daemon, provider), so the name change keeps runtime IDs
+// and agent bindings.
+func withPermissionModeLabel(name string, cfg Config, provider string) string {
+	switch {
+	case provider == "claude" && cfg.ClaudePermissionMode == "auto":
+		return name + " · auto mode"
+	case provider == "codex" && cfg.CodexAutoReview:
+		return name + " · auto review"
+	}
+	return name
+}
+
 func providerDisplayName(name string) string {
 	if name == "" {
 		return name
