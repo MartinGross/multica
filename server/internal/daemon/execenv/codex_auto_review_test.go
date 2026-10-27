@@ -34,6 +34,7 @@ func TestEnsureCodexSandboxConfigAutoReviewOwnsApprovalKeys(t *testing.T) {
 		`approvals_reviewer = "user"`,
 		``,
 		`[profiles.fast]`,
+		`model = "gpt-5.6-mini"`,
 		`approval_policy = "never"`,
 		``,
 	}, "\n")
@@ -73,8 +74,11 @@ func TestEnsureCodexSandboxConfigAutoReviewOwnsApprovalKeys(t *testing.T) {
 	if strings.Contains(root, `approval_policy = "never"`) || strings.Contains(root, `approvals_reviewer = "user"`) {
 		t.Fatalf("user's root approval keys must be stripped (duplicate keys make Codex reject the file):\n%s", got)
 	}
-	if !strings.Contains(got, "[profiles.fast]\napproval_policy = \"never\"") {
-		t.Fatalf("profile-scoped keys must be preserved:\n%s", got)
+	if strings.Contains(got, `approval_policy = "never"`) {
+		t.Fatalf("profile-scoped approval keys must be stripped, a selected profile would override the block:\n%s", got)
+	}
+	if !strings.Contains(got, "[profiles.fast]\nmodel = \"gpt-5.6-mini\"") {
+		t.Fatalf("other profile keys must be preserved:\n%s", got)
 	}
 	if !strings.Contains(got, `model = "gpt-5.6-sol"`) {
 		t.Fatalf("unrelated user keys must be preserved:\n%s", got)

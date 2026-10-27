@@ -414,9 +414,11 @@ func upsertMulticaManagedBlock(content string, policy codexSandboxPolicy) string
 	// Drop any previously written managed block (wherever it sits).
 	content = managedBlockRe.ReplaceAllString(content, "")
 	if policy.AutoReview {
-		// The block now owns these root keys; a second root-level assignment
-		// in the copied user config would make Codex reject the file.
-		content = stripTopLevelKeys(content, "approval_policy", "approvals_reviewer")
+		// The block now owns these keys. A second root-level assignment would
+		// make Codex reject the file, and a profile-scoped one would override
+		// the block on Codex versions that still honor `profile = ...`
+		// (0.164.0 refuses that key outright).
+		content = stripOwnedApprovalKeys(content)
 	}
 	block := renderMulticaManagedBlock(policy)
 	// Trim leading blank lines left behind by the removal so we don't grow
@@ -428,19 +430,25 @@ func upsertMulticaManagedBlock(content string, policy codexSandboxPolicy) string
 	return block + "\n" + content
 }
 
-// stripTopLevelKeys removes root-table assignments of the given keys — lines
-// before the first `[table]` header. Keys inside tables such as
-// `[profiles.x]` are left alone.
-func stripTopLevelKeys(content string, keys ...string) string {
+// codexAutoReviewOwnedKeys are the keys the auto-review managed block owns.
+var codexAutoReviewOwnedKeys = []string{"approval_policy", "approvals_reviewer", "sandbox_mode"}
+
+// profileTableHeaderRe matches `[profiles.<name>]`, the tables whose values
+// override the root when that profile is selected.
+var profileTableHeaderRe = regexp.MustCompile(`^\[\s*profiles\s*\.\s*(?:"[^"]*"|'[^']*'|[A-Za-z0-9_-]+)\s*\]`)
+
+// stripOwnedApprovalKeys removes assignments of codexAutoReviewOwnedKeys from
+// the root table and from every `[profiles.<name>]` table. Other keys, and
+// other tables, are left alone.
+func stripOwnedApprovalKeys(content string) string {
 	lines := strings.Split(content, "\n")
 	out := make([]string, 0, len(lines))
-	inTable := false
+	inOwnedScope := true // the root table
 	for _, line := range lines {
 		trimmed := strings.TrimSpace(line)
 		if strings.HasPrefix(trimmed, "[") {
-			inTable = true
-		}
-		if !inTable && assignsTopLevelKey(trimmed, keys) {
+			inOwnedScope = profileTableHeaderRe.MatchString(trimmed)
+		} else if inOwnedScope && assignsKey(trimmed, codexAutoReviewOwnedKeys) {
 			continue
 		}
 		out = append(out, line)
@@ -448,7 +456,7 @@ func stripTopLevelKeys(content string, keys ...string) string {
 	return strings.Join(out, "\n")
 }
 
-func assignsTopLevelKey(trimmed string, keys []string) bool {
+func assignsKey(trimmed string, keys []string) bool {
 	eq := strings.Index(trimmed, "=")
 	if eq <= 0 {
 		return false
