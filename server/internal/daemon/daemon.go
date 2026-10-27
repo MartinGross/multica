@@ -5804,6 +5804,12 @@ func (d *Daemon) handleTask(ctx context.Context, task Task, slot int) {
 		}
 	}
 
+	if len(result.PermissionDenials) > 0 {
+		if denialErr := d.client.ReportPermissionDenials(ctx, task.ID, result.PermissionDenials); denialErr != nil {
+			taskLog.Warn("report permission denials failed", "error", denialErr, "count", len(result.PermissionDenials))
+		}
+	}
+
 	// Check if we were cancelled by the polling goroutine.
 	select {
 	case <-cancelledByPoll:
@@ -8981,6 +8987,16 @@ func (d *Daemon) runTask(ctx context.Context, task Task, provider string, slot i
 		})
 	}
 
+	var permissionDenials []TaskPermissionDenial
+	for _, denial := range result.PermissionDenials {
+		permissionDenials = append(permissionDenials, TaskPermissionDenial{
+			Tool:       denial.Tool,
+			Input:      denial.Input,
+			ReasonType: denial.ReasonType,
+			Reason:     denial.Reason,
+		})
+	}
+
 	// MUL-5305: withhold a Codex session whose rollout never reached the per-issue
 	// store, for ANY terminal state — including `completed`, since a completed
 	// turn whose rollout is missing is exactly the #5934 case and must not be
@@ -9012,12 +9028,13 @@ func (d *Daemon) runTask(ctx context.Context, task Task, provider string, slot i
 			// a normal completion so the task is not incorrectly marked as
 			// blocked.
 			return TaskResult{
-				Status:    "completed",
-				Comment:   "",
-				SessionID: result.SessionID,
-				WorkDir:   env.WorkDir,
-				EnvRoot:   env.RootDir,
-				Usage:     usageEntries,
+				Status:            "completed",
+				Comment:           "",
+				SessionID:         result.SessionID,
+				WorkDir:           env.WorkDir,
+				EnvRoot:           env.RootDir,
+				Usage:             usageEntries,
+				PermissionDenials: permissionDenials,
 			}, nil
 		}
 		// Detect "poisoned" terminal output: the agent didn't reach a real
@@ -9032,22 +9049,24 @@ func (d *Daemon) runTask(ctx context.Context, task Task, provider string, slot i
 				"failure_reason", reason,
 			)
 			return TaskResult{
-				Status:        "blocked",
-				Comment:       result.Output,
-				SessionID:     result.SessionID,
-				WorkDir:       env.WorkDir,
-				EnvRoot:       env.RootDir,
-				Usage:         usageEntries,
-				FailureReason: reason,
+				Status:            "blocked",
+				Comment:           result.Output,
+				SessionID:         result.SessionID,
+				WorkDir:           env.WorkDir,
+				EnvRoot:           env.RootDir,
+				Usage:             usageEntries,
+				PermissionDenials: permissionDenials,
+				FailureReason:     reason,
 			}, nil
 		}
 		taskResult = TaskResult{
-			Status:    "completed",
-			Comment:   result.Output,
-			SessionID: result.SessionID,
-			WorkDir:   env.WorkDir,
-			EnvRoot:   env.RootDir,
-			Usage:     usageEntries,
+			Status:            "completed",
+			Comment:           result.Output,
+			SessionID:         result.SessionID,
+			WorkDir:           env.WorkDir,
+			EnvRoot:           env.RootDir,
+			Usage:             usageEntries,
+			PermissionDenials: permissionDenials,
 		}
 		return taskResult, nil
 	case "timeout":
@@ -9067,13 +9086,14 @@ func (d *Daemon) runTask(ctx context.Context, task Task, provider string, slot i
 			failureReason = reason
 		}
 		return TaskResult{
-			Status:        "blocked",
-			Comment:       comment,
-			SessionID:     result.SessionID,
-			WorkDir:       env.WorkDir,
-			EnvRoot:       env.RootDir,
-			FailureReason: failureReason,
-			Usage:         usageEntries,
+			Status:            "blocked",
+			Comment:           comment,
+			SessionID:         result.SessionID,
+			WorkDir:           env.WorkDir,
+			EnvRoot:           env.RootDir,
+			FailureReason:     failureReason,
+			Usage:             usageEntries,
+			PermissionDenials: permissionDenials,
 		}, nil
 	case "idle_watchdog":
 		// The idle watchdog force-stopped the run because the backend
@@ -9086,13 +9106,14 @@ func (d *Daemon) runTask(ctx context.Context, task Task, provider string, slot i
 			comment = idleWatchdogReason(d.cfg.AgentIdleWatchdog)
 		}
 		return TaskResult{
-			Status:        "blocked",
-			Comment:       comment,
-			SessionID:     result.SessionID,
-			WorkDir:       env.WorkDir,
-			EnvRoot:       env.RootDir,
-			FailureReason: "idle_watchdog",
-			Usage:         usageEntries,
+			Status:            "blocked",
+			Comment:           comment,
+			SessionID:         result.SessionID,
+			WorkDir:           env.WorkDir,
+			EnvRoot:           env.RootDir,
+			FailureReason:     "idle_watchdog",
+			Usage:             usageEntries,
+			PermissionDenials: permissionDenials,
 		}, nil
 	case "cancelled":
 		// The daemon's own context was cancelled (server cancel or daemon
@@ -9111,11 +9132,12 @@ func (d *Daemon) runTask(ctx context.Context, task Task, provider string, slot i
 		// it says the same thing — an English sentence beside it would only
 		// be a worse copy of it.
 		return TaskResult{
-			Status:    "cancelled",
-			SessionID: result.SessionID,
-			WorkDir:   env.WorkDir,
-			EnvRoot:   env.RootDir,
-			Usage:     usageEntries,
+			Status:            "cancelled",
+			SessionID:         result.SessionID,
+			WorkDir:           env.WorkDir,
+			EnvRoot:           env.RootDir,
+			Usage:             usageEntries,
+			PermissionDenials: permissionDenials,
 		}, nil
 	default:
 		errMsg := result.Error
@@ -9198,13 +9220,14 @@ func (d *Daemon) runTask(ctx context.Context, task Task, provider string, slot i
 		errMsg = annotateHermesProviderUnconfigured(errMsg, provider, env.HermesHome != "")
 		errMsg = annotateCodexRetiredCompaction(errMsg, provider)
 		return TaskResult{
-			Status:        "blocked",
-			Comment:       errMsg,
-			SessionID:     result.SessionID,
-			WorkDir:       env.WorkDir,
-			EnvRoot:       env.RootDir,
-			Usage:         usageEntries,
-			FailureReason: failureReason,
+			Status:            "blocked",
+			Comment:           errMsg,
+			SessionID:         result.SessionID,
+			WorkDir:           env.WorkDir,
+			EnvRoot:           env.RootDir,
+			Usage:             usageEntries,
+			PermissionDenials: permissionDenials,
+			FailureReason:     failureReason,
 		}, nil
 	}
 }
@@ -9399,6 +9422,7 @@ func mergeWorktreeRepairResult(original agent.Result, originalTools int32, repai
 		return original, originalTools
 	}
 	original.Usage = mergeUsage(original.Usage, repair.Usage)
+	original.PermissionDenials = append(original.PermissionDenials, repair.PermissionDenials...)
 	if repair.Status == "completed" && repair.SessionID != "" {
 		original.SessionID = repair.SessionID
 	}
@@ -9406,18 +9430,23 @@ func mergeWorktreeRepairResult(original agent.Result, originalTools int32, repai
 }
 
 func reconcileFreshRetryResult(first agent.Result, firstUsage map[string]agent.TokenUsage, firstTools int32, retry agent.Result, retryTools int32, retryErr error) (agent.Result, int32) {
+	// Denials from either attempt were real refusals; keep both, like usage.
+	denials := append(append([]agent.PermissionDenial(nil), first.PermissionDenials...), retry.PermissionDenials...)
 	switch {
 	case retryErr != nil:
 		first.Usage = firstUsage
 		return first, firstTools
 	case retry.SessionID != "":
 		retry.Usage = mergeUsage(firstUsage, retry.Usage)
+		retry.PermissionDenials = denials
 		return retry, retryTools
 	case retry.Status == "completed":
 		retry.Usage = mergeUsage(firstUsage, retry.Usage)
+		retry.PermissionDenials = denials
 		return retry, retryTools
 	default:
 		first.Usage = mergeUsage(firstUsage, retry.Usage)
+		first.PermissionDenials = denials
 		return first, firstTools
 	}
 }

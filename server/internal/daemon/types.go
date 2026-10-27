@@ -320,6 +320,17 @@ type TaskResult struct {
 	// precisely when the abandoned id would otherwise stay selectable.
 	RetiredSessionID string           `json:"-"`
 	Usage            []TaskUsageEntry `json:"usage,omitempty"` // per-model token usage
+	// PermissionDenials are tool calls the provider refused to run. Reported
+	// through their own endpoint, like Usage, not the terminal report.
+	PermissionDenials []TaskPermissionDenial `json:"-"`
+}
+
+// TaskPermissionDenial is one refused tool call, as sent to the server.
+type TaskPermissionDenial struct {
+	Tool       string `json:"tool"`
+	Input      string `json:"input,omitempty"`
+	ReasonType string `json:"reason_type,omitempty"`
+	Reason     string `json:"reason,omitempty"`
 }
 
 // PluginHookTool is one agent-trigger plugin hook, as the agent will see it.

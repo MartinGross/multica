@@ -263,6 +263,14 @@ type TokenUsage struct {
 const CostUSDTicksPerUSD = 10_000_000_000
 
 // Result is the final outcome after an agent session completes.
+// PermissionDenial is one tool call a provider refused to run.
+type PermissionDenial struct {
+	Tool       string // provider tool name, e.g. "Bash"
+	Input      string // one-line summary of the tool input, e.g. the shell command
+	ReasonType string // provider category, e.g. "safetyCheck", "classifier", a Codex risk level
+	Reason     string // provider explanation, when it gives one
+}
+
 type Result struct {
 	Status     string // "completed", "failed", "aborted", "timeout", "cancelled"
 	Output     string // final user-facing output selected by the backend
@@ -270,6 +278,11 @@ type Result struct {
 	DurationMs int64
 	SessionID  string
 	Usage      map[string]TokenUsage // keyed by model name
+	// PermissionDenials lists tool calls the provider's own permission layer
+	// refused to run during this session (Claude Code auto mode or safety
+	// checks, Codex auto review). The daemon surfaces them on the issue so a
+	// person can decide whether to allow the action.
+	PermissionDenials []PermissionDenial
 	// ResumeRejected is positive evidence that this run's requested resume
 	// was permanently refused — the transcript is gone, the session belongs to
 	// another provider account, OR the session still exists but its history

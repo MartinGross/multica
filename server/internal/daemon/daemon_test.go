@@ -1042,6 +1042,16 @@ func TestBackendResumeContinuityNoticeSuppressedWhenPromptAlreadyHasIt(t *testin
 // poisoned prior session id (carried only on the first result) must never be
 // grafted onto the fresh retry's result, and a fresh retry that does not
 // establish a new session must not relabel the poisoned session as resumable.
+func TestReconcileFreshRetryResultKeepsPermissionDenialsFromBothAttempts(t *testing.T) {
+	first := agent.Result{Status: "failed", PermissionDenials: []agent.PermissionDenial{{Tool: "Bash", Input: "first"}}}
+	retry := agent.Result{Status: "completed", SessionID: "sess", PermissionDenials: []agent.PermissionDenial{{Tool: "Bash", Input: "retry"}}}
+
+	got, _ := reconcileFreshRetryResult(first, nil, 0, retry, 0, nil)
+	if len(got.PermissionDenials) != 2 || got.PermissionDenials[0].Input != "first" || got.PermissionDenials[1].Input != "retry" {
+		t.Fatalf("PermissionDenials = %+v, want first then retry", got.PermissionDenials)
+	}
+}
+
 func TestReconcileFreshRetryResult(t *testing.T) {
 	t.Parallel()
 

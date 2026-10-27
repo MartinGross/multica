@@ -5319,6 +5319,52 @@ func authoritativeCostTicks(ticks int64) pgtype.Int8 {
 	return pgtype.Int8{Int64: ticks, Valid: true}
 }
 
+const maxReportedPermissionDenials = 50
+
+// TaskPermissionDenialPayload is one tool call the provider refused to run.
+type TaskPermissionDenialPayload struct {
+	Tool       string `json:"tool"`
+	Input      string `json:"input"`
+	ReasonType string `json:"reason_type"`
+	Reason     string `json:"reason"`
+}
+
+// ReportTaskPermissionDenials surfaces refused tool calls on the task's issue.
+// The daemon reports them once per run, separately from the terminal report.
+func (h *Handler) ReportTaskPermissionDenials(w http.ResponseWriter, r *http.Request) {
+	taskID := chi.URLParam(r, "taskId")
+
+	task, ok := h.requireDaemonTaskAccess(w, r, taskID)
+	if !ok {
+		return
+	}
+
+	var req struct {
+		Denials []TaskPermissionDenialPayload `json:"denials"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	// The comment lists at most MaxPermissionDenialsPerComment; accept a few
+	// more so the overflow count stays meaningful, but bound the request.
+	if len(req.Denials) > maxReportedPermissionDenials {
+		req.Denials = req.Denials[:maxReportedPermissionDenials]
+	}
+	denials := make([]service.PermissionDenial, 0, len(req.Denials))
+	for _, d := range req.Denials {
+		denials = append(denials, service.PermissionDenial{
+			Tool:       util.SanitizeTextForPostgres(d.Tool),
+			Input:      util.SanitizeTextForPostgres(d.Input),
+			ReasonType: util.SanitizeTextForPostgres(d.ReasonType),
+			Reason:     util.SanitizeTextForPostgres(d.Reason),
+		})
+	}
+	h.TaskService.NotePermissionDenials(r.Context(), task, denials)
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
 func (h *Handler) ReportTaskUsage(w http.ResponseWriter, r *http.Request) {
 	taskID := chi.URLParam(r, "taskId")
 

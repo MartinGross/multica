@@ -661,6 +661,18 @@ func (c *Client) ReportTaskUsage(ctx context.Context, taskID string, usage []Tas
 	}, nil)
 }
 
+// ReportPermissionDenials asks the server to surface the tool calls the
+// provider refused on the task's issue. Best-effort: servers without the
+// endpoint answer 404, which the caller only logs.
+func (c *Client) ReportPermissionDenials(ctx context.Context, taskID string, denials []TaskPermissionDenial) error {
+	if len(denials) == 0 {
+		return nil
+	}
+	return c.postJSON(ctx, fmt.Sprintf("/api/daemon/tasks/%s/permission-denials", taskID), map[string]any{
+		"denials": denials,
+	}, nil)
+}
+
 func (c *Client) FailTask(ctx context.Context, taskID, errMsg, sessionID, workDir, branchName, failureReason string, sessionRolloutMissing bool, retiredSessionID, durableWorkDir string) error {
 	return c.failTaskWithRetrySchedule(ctx, taskID, errMsg, sessionID, workDir, branchName, failureReason, sessionRolloutMissing, retiredSessionID, durableWorkDir, defaultTerminalRetrySchedule)
 }
