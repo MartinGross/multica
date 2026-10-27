@@ -373,7 +373,7 @@ Agent-specific overrides:
 | `MULTICA_CLAUDE_PATH` | Custom path to the `claude` binary |
 | `MULTICA_CLAUDE_MODEL` | Override the Claude model used |
 | `MULTICA_CLAUDE_ARGS` | Default extra arguments for Claude Code runs |
-| `MULTICA_CLAUDE_PERMISSION_MODE` | Claude Code `--permission-mode` for daemon runs: `bypassPermissions` (default) or `auto` |
+| `MULTICA_CLAUDE_PERMISSION_MODE` | Claude Code `--permission-mode` for daemon runs: `bypassPermissions` (default) or `auto`; with `auto` the runtime name gets ` · auto mode` |
 | `MULTICA_ANTIGRAVITY_PATH` | Custom path to the `agy` binary |
 | `MULTICA_ANTIGRAVITY_MODEL` | Override the Antigravity model used |
 | `MULTICA_CODEBUDDY_PATH` | Custom path to the `codebuddy` binary |
@@ -386,7 +386,7 @@ Agent-specific overrides:
 | `MULTICA_CODEX_PATH` | Custom path to the `codex` binary |
 | `MULTICA_CODEX_MODEL` | Override the Codex model used |
 | `MULTICA_CODEX_ARGS` | Default extra arguments for Codex runs |
-| `MULTICA_CODEX_AUTO_REVIEW` | Run Codex in the `workspace-write` sandbox with Codex auto review deciding sandbox escalations instead of granting them (`1` to enable; refused on Windows without a native sandbox) |
+| `MULTICA_CODEX_AUTO_REVIEW` | Run Codex in the `workspace-write` sandbox with Codex auto review deciding sandbox escalations instead of granting them (`1` to enable; refused on Windows without a native sandbox; the runtime name gets ` · auto review`) |
 | `MULTICA_COPILOT_PATH` | Custom path to the `copilot` binary |
 | `MULTICA_COPILOT_MODEL` | Override the Copilot model used (note: GitHub Copilot routes models through your account entitlement, so this may not be honoured) |
 | `MULTICA_OPENCODE_PATH` | Custom path to the `opencode` binary |
