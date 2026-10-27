@@ -155,6 +155,7 @@ type Config struct {
 	AgentToolWatchdog           time.Duration // force-stop a run when a single tool call stays in flight (silent) this long (0 = never force-stop during a tool call, which now also covers a live Cursor background shell); defaults to AgentIdleWatchdog, so operators tune one number unless they deliberately want a wider tool budget
 	ClaudeArgs                  []string
 	ClaudePermissionMode        string // Claude Code --permission-mode; empty means the backend default (bypassPermissions)
+	CodexAutoReview             bool   // run Codex in workspace-write with auto review (MULTICA_CODEX_AUTO_REVIEW)
 	CodexArgs                   []string
 	CodebuddyArgs               []string
 	QwenArgs                    []string
@@ -278,6 +279,7 @@ func LoadConfig(overrides Overrides) (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	codexAutoReview := boolFromEnv("MULTICA_CODEX_AUTO_REVIEW", false)
 	codexArgs, err := shellArgsFromEnv("MULTICA_CODEX_ARGS")
 	if err != nil {
 		return Config{}, err
@@ -670,6 +672,7 @@ func LoadConfig(overrides Overrides) (Config, error) {
 		AgentToolWatchdog:               agentToolWatchdog,
 		ClaudeArgs:                      claudeArgs,
 		ClaudePermissionMode:            claudePermissionMode,
+		CodexAutoReview:                 codexAutoReview,
 		CodexArgs:                       codexArgs,
 		CodebuddyArgs:                   codebuddyArgs,
 		QwenArgs:                        qwenArgs,

@@ -41,6 +41,12 @@ type codexSandboxPolicy struct {
 	// NetworkAccess controls `[sandbox_workspace_write] network_access`.
 	// Only meaningful when Mode is "workspace-write".
 	NetworkAccess bool
+	// AutoReview routes sandbox-escalation approvals to Codex's auto-review
+	// agent (approval_policy = "on-request", approvals_reviewer =
+	// "auto_review") instead of the daemon. Only set with workspace-write:
+	// under danger-full-access nothing crosses a boundary, so nothing would
+	// ever be reviewed.
+	AutoReview bool
 	// Reason is a short human-readable label used in warn-level logs.
 	Reason string
 	// Hint is an optional, actionable remediation surfaced in warn-level logs
@@ -129,6 +135,26 @@ func codexSandboxPolicyFor(goos, detectedVersion string) codexSandboxPolicy {
 		Reason:        reason,
 		Hint:          codexUpgradeHint(),
 	}
+}
+
+// codexAutoReviewPolicy is the opt-in policy behind MULTICA_CODEX_AUTO_REVIEW:
+// workspace-write with network on every platform that can enforce it, so
+// actions beyond the sandbox go to Codex's auto-review agent. It deliberately
+// ignores CodexDarwinNetworkAccessFixedVersion — the operator opted in, and
+// codex-cli 0.164.0 reaches both external hosts and the local Multica API from
+// the macOS sandbox. Windows without a native sandbox cannot enforce
+// workspace-write, and running unsandboxed under a flag that promises review
+// would be worse than refusing, so that case is an error.
+func codexAutoReviewPolicy(goos string, winState windowsSandboxConfig) (codexSandboxPolicy, error) {
+	if resolveGOOS(goos) == "windows" && winState == windowsSandboxAbsent {
+		return codexSandboxPolicy{}, fmt.Errorf("codex auto review needs a sandbox, but no native windows.sandbox is configured; configure one or unset MULTICA_CODEX_AUTO_REVIEW")
+	}
+	return codexSandboxPolicy{
+		Mode:          "workspace-write",
+		NetworkAccess: true,
+		AutoReview:    true,
+		Reason:        "codex auto review enabled (MULTICA_CODEX_AUTO_REVIEW)",
+	}, nil
 }
 
 // windowsSandboxConfig is the tri-state of a native Codex Windows sandbox
@@ -357,6 +383,10 @@ func renderMulticaManagedBlock(policy codexSandboxPolicy) string {
 	if policy.Mode == "workspace-write" {
 		b.WriteString(fmt.Sprintf("sandbox_workspace_write.network_access = %t\n", policy.NetworkAccess))
 	}
+	if policy.AutoReview {
+		b.WriteString("approval_policy = \"on-request\"\n")
+		b.WriteString("approvals_reviewer = \"auto_review\"\n")
+	}
 	b.WriteString(multicaManagedEndMarker)
 	b.WriteString("\n")
 	return b.String()
@@ -383,6 +413,11 @@ var managedBlockRe = regexp.MustCompile(
 func upsertMulticaManagedBlock(content string, policy codexSandboxPolicy) string {
 	// Drop any previously written managed block (wherever it sits).
 	content = managedBlockRe.ReplaceAllString(content, "")
+	if policy.AutoReview {
+		// The block now owns these root keys; a second root-level assignment
+		// in the copied user config would make Codex reject the file.
+		content = stripTopLevelKeys(content, "approval_policy", "approvals_reviewer")
+	}
 	block := renderMulticaManagedBlock(policy)
 	// Trim leading blank lines left behind by the removal so we don't grow
 	// the file on every idempotent rewrite.
@@ -391,6 +426,40 @@ func upsertMulticaManagedBlock(content string, policy codexSandboxPolicy) string
 		return block
 	}
 	return block + "\n" + content
+}
+
+// stripTopLevelKeys removes root-table assignments of the given keys — lines
+// before the first `[table]` header. Keys inside tables such as
+// `[profiles.x]` are left alone.
+func stripTopLevelKeys(content string, keys ...string) string {
+	lines := strings.Split(content, "\n")
+	out := make([]string, 0, len(lines))
+	inTable := false
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "[") {
+			inTable = true
+		}
+		if !inTable && assignsTopLevelKey(trimmed, keys) {
+			continue
+		}
+		out = append(out, line)
+	}
+	return strings.Join(out, "\n")
+}
+
+func assignsTopLevelKey(trimmed string, keys []string) bool {
+	eq := strings.Index(trimmed, "=")
+	if eq <= 0 {
+		return false
+	}
+	name := strings.TrimSpace(trimmed[:eq])
+	for _, key := range keys {
+		if name == key {
+			return true
+		}
+	}
+	return false
 }
 
 // stripLegacySandboxDirectives removes top-level `sandbox_mode = ...` lines

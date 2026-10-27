@@ -136,6 +136,12 @@ type ExecOptions struct {
 	// ClaudePermissionMode overrides Claude Code's --permission-mode. Empty
 	// keeps bypassPermissions; other providers ignore it.
 	ClaudePermissionMode string
+	// CodexAutoReview means the per-task Codex config routes approvals to
+	// Codex's auto-review agent. The backend then declines any approval
+	// request that still reaches it instead of granting it, and drops `-c`
+	// overrides that would loosen the sandbox or approval policy. Other
+	// providers ignore it.
+	CodexAutoReview bool
 	// CursorHookCommand is the argv of the multica hook relay (the daemon's own
 	// binary followed by CursorHookHelperArg). The cursor backend needs it, with
 	// EnableTaskSupplement, to accept additional messages; other providers

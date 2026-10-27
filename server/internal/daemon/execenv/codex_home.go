@@ -51,6 +51,9 @@ type CodexHomeOptions struct {
 	// daemon falls back to danger-full-access for network access. See
 	// codex_sandbox.go for details.
 	CodexVersion string
+	// AutoReview selects codexAutoReviewPolicy instead of the platform
+	// default sandbox policy (MULTICA_CODEX_AUTO_REVIEW).
+	AutoReview bool
 	// GOOS overrides the target platform when deciding the sandbox policy.
 	// Empty means use runtime.GOOS. Primarily exists so tests can exercise
 	// both macOS and Linux paths deterministically.
@@ -286,6 +289,12 @@ func prepareCodexHomeWithOpts(codexHome string, opts CodexHomeOptions, logger *s
 		winState = resolveWindowsSandboxState(configFile, configSyncErr, statSharedCodexConfig(sharedHome), opts.CodexCustomArgs, logger)
 	}
 	policy := codexSandboxPolicyForConfig(opts.GOOS, opts.CodexVersion, winState)
+	if opts.AutoReview {
+		var err error
+		if policy, err = codexAutoReviewPolicy(opts.GOOS, winState); err != nil {
+			return err
+		}
+	}
 	if err := ensureCodexSandboxConfig(configFile, policy, opts.CodexVersion, logger); err != nil {
 		// The managed block is the authoritative on-disk sandbox policy. If it
 		// can't be written, config.toml keeps whatever it already had — on a

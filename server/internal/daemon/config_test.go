@@ -761,6 +761,30 @@ func TestLoadConfig_ClaudePermissionMode(t *testing.T) {
 	}
 }
 
+func TestLoadConfig_CodexAutoReview(t *testing.T) {
+	stageFakeAgent(t)
+	load := func() Config {
+		t.Helper()
+		cfg, err := LoadConfig(Overrides{
+			ServerURL:      "http://localhost:8080",
+			WorkspacesRoot: t.TempDir(),
+		})
+		if err != nil {
+			t.Fatalf("LoadConfig: %v", err)
+		}
+		return cfg
+	}
+
+	t.Setenv("MULTICA_CODEX_AUTO_REVIEW", "")
+	if load().CodexAutoReview {
+		t.Fatal("CodexAutoReview should default to off")
+	}
+	t.Setenv("MULTICA_CODEX_AUTO_REVIEW", "1")
+	if !load().CodexAutoReview {
+		t.Fatal("MULTICA_CODEX_AUTO_REVIEW=1 should enable CodexAutoReview")
+	}
+}
+
 func TestLoadConfig_CodexTurnInterruptTimeout(t *testing.T) {
 	stageFakeAgent(t)
 	t.Setenv("MULTICA_CODEX_TURN_INTERRUPT_TIMEOUT", "750ms")

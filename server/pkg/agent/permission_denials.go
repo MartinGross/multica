@@ -151,6 +151,20 @@ func (c *codexPermissionDenials) observe(params map[string]any) {
 	})
 }
 
+// recordDeclined records an approval request the daemon declined itself in
+// auto-review mode. The tool is the request method; the input is whatever the
+// request names (a command, a reason, or the raw params).
+func (c *codexPermissionDenials) recordDeclined(method string, params json.RawMessage) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.list = append(c.list, PermissionDenial{
+		Tool:       method,
+		Input:      summarizePermissionDenialInput(params),
+		ReasonType: "declined",
+		Reason:     "approval request reached the daemon in auto-review mode",
+	})
+}
+
 func (c *codexPermissionDenials) snapshot() []PermissionDenial {
 	c.mu.Lock()
 	defer c.mu.Unlock()
