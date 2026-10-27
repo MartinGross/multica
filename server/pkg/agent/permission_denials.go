@@ -125,8 +125,8 @@ func (c *codexPermissionDenials) observe(params map[string]any) {
 		return
 	}
 	rationale, _ := review["rationale"].(string)
-	// The review notification schema is unstable and the fixtures seen so far
-	// carry no action; "action" is a best guess at where one would appear.
+	// Codex 0.164.0 reports the reviewed call as
+	// "action": {"type":"command","command":"…","cwd":"…"}.
 	var input string
 	if action, ok := params["action"]; ok && action != nil {
 		if raw, err := json.Marshal(action); err == nil {
