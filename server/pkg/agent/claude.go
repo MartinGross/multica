@@ -129,6 +129,7 @@ func (b *claudeBackend) Execute(ctx context.Context, prompt string, opts ExecOpt
 		resultCh:      make(chan struct{}),
 		usage:         make(map[string]TokenUsage),
 		seenUsage:     make(map[string]struct{}),
+		denials:       newClaudePermissionDenials(),
 	}
 	if warmHit {
 		turn.sessionID = proc.sessionID
@@ -245,6 +246,7 @@ func (b *claudeBackend) Execute(ctx context.Context, prompt string, opts ExecOpt
 		assistantEventCount := turn.assistantEventCount
 		toolUseCount := turn.toolUseCount
 		unreadableAssistantCount := turn.unreadableAssistantCount
+		permissionDenials := turn.denials.list()
 		turn.mu.Unlock()
 
 		// writeDone is buffered (cap 1) and the writer always sends — by now
@@ -379,13 +381,14 @@ func (b *claudeBackend) Execute(ctx context.Context, prompt string, opts ExecOpt
 		}
 
 		resCh <- Result{
-			Status:         finalStatus,
-			Output:         finalOutput,
-			Error:          finalError,
-			DurationMs:     duration.Milliseconds(),
-			SessionID:      reportedSessionID,
-			Usage:          usage,
-			ResumeRejected: resumeRejected,
+			Status:            finalStatus,
+			Output:            finalOutput,
+			Error:             finalError,
+			DurationMs:        duration.Milliseconds(),
+			SessionID:         reportedSessionID,
+			Usage:             usage,
+			ResumeRejected:    resumeRejected,
+			PermissionDenials: permissionDenials,
 		}
 	}()
 
@@ -433,6 +436,7 @@ type claudeTurn struct {
 	sawAsyncLaunch           bool
 	usage                    map[string]TokenUsage
 	seenUsage                map[string]struct{}
+	denials                  *claudePermissionDenials
 	eventCount               int
 	invalidEventCount        int
 	assistantEventCount      int
@@ -474,12 +478,16 @@ func (t *claudeTurn) handleMessage(msg claudeSDKMessage) {
 		if msg.SessionID != "" {
 			t.sessionID = msg.SessionID
 		}
+		if msg.Subtype == "permission_denied" {
+			t.denials.observeEvent(msg)
+		}
 		sid := t.sessionID
 		t.mu.Unlock()
 		trySend(t.msgCh, Message{Type: MessageStatus, Status: "running", SessionID: sid})
 	case "result":
 		t.coalescer.flushAll()
 		t.sawResult = true
+		t.denials.observeResult(msg.PermissionDenials)
 		t.finalResultText = msg.ResultText
 		t.resultIsError = msg.IsError
 		t.terminalReasonError = claudeTerminalReasonFailure(msg.TerminalReason, msg.ResultText)
@@ -987,6 +995,17 @@ type claudeSDKMessage struct {
 	Usage          *claudeUsage                      `json:"usage,omitempty"`
 	ModelUsage     map[string]claudeResultModelUsage `json:"modelUsage,omitempty"`
 
+	// PermissionDenials is the result event's list of tool calls Claude Code
+	// refused; it carries the input but no reason.
+	PermissionDenials []claudePermissionDenial `json:"permission_denials,omitempty"`
+
+	// system/permission_denied fields: the reason for one refusal, without
+	// the input.
+	ToolName           string `json:"tool_name,omitempty"`
+	ToolUseID          string `json:"tool_use_id,omitempty"`
+	DecisionReasonType string `json:"decision_reason_type,omitempty"`
+	DecisionReason     string `json:"decision_reason,omitempty"`
+
 	// log fields
 	Log *claudeLogEntry `json:"log,omitempty"`
 
@@ -1000,6 +1019,12 @@ type claudeSDKMessage struct {
 	RequestID string          `json:"request_id,omitempty"`
 	Request   json.RawMessage `json:"request,omitempty"`
 	Response  json.RawMessage `json:"response,omitempty"`
+}
+
+type claudePermissionDenial struct {
+	ToolName  string          `json:"tool_name"`
+	ToolUseID string          `json:"tool_use_id"`
+	ToolInput json.RawMessage `json:"tool_input"`
 }
 
 type claudeLogEntry struct {

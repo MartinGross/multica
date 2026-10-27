@@ -1782,6 +1782,7 @@ func (b *codexBackend) executeOnce(ctx context.Context, prompt string, opts Exec
 			SessionID:                    threadID,
 			DurationMs:                   duration.Milliseconds(),
 			Usage:                        usageMap,
+			PermissionDenials:            c.permissionDenials.snapshot(),
 			codexStartupRefreshRetrySafe: startupRefreshRetrySafe,
 		}
 	}()
@@ -2300,7 +2301,8 @@ type codexClient struct {
 	onGuardianRateLimit      func()
 	// rateLimits merges account/rateLimits/updated notifications; nil when
 	// the caller does not collect rate limits.
-	rateLimits *rateLimitTracker
+	rateLimits        *rateLimitTracker
+	permissionDenials codexPermissionDenials
 	// onFinalAnswer fires only for an agent message the app-server itself
 	// labelled `phase: "final_answer"` — the turn's deliverable, as opposed to
 	// the intermediate agent messages that narrate work between tool calls.
@@ -3483,6 +3485,7 @@ func (c *codexClient) handleRawNotification(method string, params map[string]any
 		// This item notification also signals semantic progress. Preserve the
 		// existing watchdog behavior when handling it specially below.
 		c.handleItemNotification(method, params)
+		c.permissionDenials.observe(params)
 		if c.guardianRateLimitCircuit != nil &&
 			c.guardianRateLimitCircuit.observeReview(params) &&
 			c.onGuardianRateLimit != nil {
