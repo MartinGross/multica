@@ -9478,6 +9478,7 @@ func (d *Daemon) runTask(ctx context.Context, task Task, provider string, slot i
 		OpenclawMode:           openclawMode,
 		OpenclawModelOverride:  openclawModelOverride,
 		ClaudeSettingsPath:     env.ClaudeSettingsPath,
+		ClaudePermissionMode:   d.cfg.ClaudePermissionMode,
 		QwenpawWorkspace:       env.QwenpawWorkspace,
 		WarmPoolBriefHash:      agent.HashWarmBrief(runtimeBrief),
 	}

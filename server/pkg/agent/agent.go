@@ -158,6 +158,9 @@ type ExecOptions struct {
 	// through Claude Code's --settings flag. It currently carries restrictive
 	// runtime-skill overrides only; other providers ignore it.
 	ClaudeSettingsPath string
+	// ClaudePermissionMode overrides Claude Code's --permission-mode. Empty
+	// keeps bypassPermissions; other providers ignore it.
+	ClaudePermissionMode string
 	// SupplementHookCommand is the argv of the provider's multica hook relay
 	// (the daemon's own binary followed by CursorHookHelperArg or
 	// AntigravityHookHelperArg). The cursor and antigravity backends need it,
