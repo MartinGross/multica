@@ -532,6 +532,18 @@ func filterCodexCustomConfigOverrides(args []string, logger *slog.Logger) []stri
 	return filterCodexConfigOverrides(args, codexManagedMcpConfigKeyRe, "mcp_servers", logger)
 }
 
+// codexManagedApprovalConfigKeyRe matches the sandbox and approval keys the
+// daemon owns in auto-review mode, at the root or under a profile.
+var codexManagedApprovalConfigKeyRe = regexp.MustCompile(
+	`^\s*(?:profiles\s*\.\s*` + codexProfileNameKeyPattern + `\s*\.\s*)?` +
+		`(?:approval_policy|approvals_reviewer|sandbox_mode|sandbox_workspace_write)\s*(?:\.|=|$)`)
+
+// filterCodexApprovalConfigOverrides drops `-c` overrides that would loosen
+// the auto-review sandbox; `-c` wins over config.toml from any argv position.
+func filterCodexApprovalConfigOverrides(args []string, logger *slog.Logger) []string {
+	return filterCodexConfigOverrides(args, codexManagedApprovalConfigKeyRe, "approval_policy", logger)
+}
+
 func filterCodexShellEnvConfigOverrides(args []string, logger *slog.Logger) []string {
 	return filterCodexConfigOverrides(args, codexManagedShellEnvConfigKeyRe, shellEnvironmentPolicyConfigNamespace, logger)
 }
@@ -1141,6 +1153,13 @@ func (b *codexBackend) executeOnce(ctx context.Context, prompt string, opts Exec
 			return filterCodexShellEnvConfigOverrides(prefix, b.cfg.Logger)
 		})
 	}
+	if opts.CodexAutoReview {
+		opts.ExtraArgs = filterCodexApprovalConfigOverrides(opts.ExtraArgs, b.cfg.Logger)
+		opts.CustomArgs = filterCodexApprovalConfigOverrides(opts.CustomArgs, b.cfg.Logger)
+		runtimeCmd = runtimeCmd.withFilteredPrefix(func(prefix []string) []string {
+			return filterCodexApprovalConfigOverrides(prefix, b.cfg.Logger)
+		})
+	}
 	if hasManagedCodexMcpConfig(opts.McpConfig) {
 		// Mirrors NormalizeCodexLaunchArgs, which applies this to ExtraArgs and
 		// CustomArgs once an agent has a managed mcp_config.
@@ -1223,6 +1242,7 @@ func (b *codexBackend) executeOnce(ctx context.Context, prompt string, opts Exec
 
 	c.attachTurnHooks(codexTurnHooks{
 		cfg:                      b.cfg,
+		autoReview:               opts.CodexAutoReview,
 		acceptNotification:       turnNotificationGate.accept,
 		guardianRateLimitCircuit: &codexGuardianRateLimitCircuit{},
 		rateLimits:               newRateLimitTracker(opts.OnRateLimits),
@@ -2303,6 +2323,9 @@ type codexClient struct {
 	// the caller does not collect rate limits.
 	rateLimits        *rateLimitTracker
 	permissionDenials codexPermissionDenials
+	// autoReview: approvals belong to Codex's auto-review agent, so a request
+	// that still reaches the daemon is declined rather than granted.
+	autoReview bool
 	// onFinalAnswer fires only for an agent message the app-server itself
 	// labelled `phase: "final_answer"` — the turn's deliverable, as opposed to
 	// the intermediate agent messages that narrate work between tool calls.
@@ -2843,6 +2866,10 @@ func (c *codexClient) handleServerRequest(raw map[string]json.RawMessage) {
 	var method string
 	_ = json.Unmarshal(raw["method"], &method)
 
+	if c.autoReview && c.declineServerRequest(id, method, raw["params"]) {
+		return
+	}
+
 	// Auto-approve all exec/patch requests in daemon mode
 	switch method {
 	case "item/commandExecution/requestApproval", "execCommandApproval":
@@ -2860,6 +2887,32 @@ func (c *codexClient) handleServerRequest(raw map[string]json.RawMessage) {
 		c.respondError(id, -32601, msg)
 	}
 }
+
+// declineServerRequest answers an approval request with a refusal in
+// auto-review mode and records it as a permission denial, so it reaches the
+// issue like a reviewer denial. It reports false for methods it does not own.
+// Decision shapes follow the codex-cli 0.164.0 app-server schema.
+func (c *codexClient) declineServerRequest(id int, method string, params json.RawMessage) bool {
+	switch method {
+	case "item/commandExecution/requestApproval", "item/fileChange/requestApproval":
+		c.respond(id, map[string]any{"decision": "decline"})
+	case "execCommandApproval", "applyPatchApproval":
+		c.respond(id, map[string]any{"decision": map[string]any{
+			"denied": map[string]any{"rejection": codexAutoReviewRejection},
+		}})
+	case "item/permissions/requestApproval":
+		c.respond(id, map[string]any{"permissions": map[string]any{}, "scope": "turn"})
+	case "mcpServer/elicitation/request":
+		c.respond(id, map[string]any{"action": "decline", "content": nil, "_meta": nil})
+	default:
+		return false
+	}
+	c.permissionDenials.recordDeclined(method, params)
+	c.cfg.Logger.Info("codex: declined approval request in auto-review mode", "method", method)
+	return true
+}
+
+const codexAutoReviewRejection = "approvals are handled by Codex auto review; the daemon does not grant them"
 
 // codexPermissionsApprovalResponse builds the auto-grant reply for a Codex
 // item/permissions/requestApproval server request. In daemon mode there is no

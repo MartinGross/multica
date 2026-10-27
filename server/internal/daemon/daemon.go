@@ -8773,6 +8773,7 @@ func (d *Daemon) runTask(ctx context.Context, task Task, provider string, slot i
 			HermesSessionStore:    hermesSessionStore,
 			ReasonixEnv:           reasonixEnv,
 			CodexCustomArgs:       codexSandboxArgs,
+			CodexAutoReview:       d.cfg.CodexAutoReview,
 			Task:                  taskCtx,
 		})
 		if err != nil {
@@ -8825,6 +8826,7 @@ func (d *Daemon) runTask(ctx context.Context, task Task, provider string, slot i
 			HermesSessionStore:    hermesSessionStore,
 			ReasonixEnv:           reasonixEnv,
 			CodexCustomArgs:       codexSandboxArgs,
+			CodexAutoReview:       d.cfg.CodexAutoReview,
 			Task:                  taskCtx,
 		}
 		if localAssignment.UsesWorktree() {
@@ -9485,6 +9487,7 @@ func (d *Daemon) runTask(ctx context.Context, task Task, provider string, slot i
 		OpenclawModelOverride:  openclawModelOverride,
 		ClaudeSettingsPath:     env.ClaudeSettingsPath,
 		ClaudePermissionMode:   d.cfg.ClaudePermissionMode,
+		CodexAutoReview:        d.cfg.CodexAutoReview,
 		QwenpawWorkspace:       env.QwenpawWorkspace,
 		WarmPoolBriefHash:      agent.HashWarmBrief(runtimeBrief),
 	}

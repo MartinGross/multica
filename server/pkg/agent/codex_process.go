@@ -37,6 +37,7 @@ func (w *codexSyncWriter) Close() error {
 
 type codexTurnHooks struct {
 	cfg                      Config
+	autoReview               bool
 	acceptNotification       func(method string, params map[string]any) bool
 	onDiscardedNotification  func(method string, params map[string]any)
 	onMessage                func(Message)
@@ -56,6 +57,7 @@ func (c *codexClient) attachTurnHooks(h codexTurnHooks) {
 	defer c.hookMu.Unlock()
 
 	c.cfg = h.cfg
+	c.autoReview = h.autoReview
 	c.acceptNotification = h.acceptNotification
 	c.onDiscardedNotification = h.onDiscardedNotification
 	c.onMessage = h.onMessage
@@ -72,6 +74,8 @@ func (c *codexClient) attachTurnHooks(h codexTurnHooks) {
 	c.agentMessageOrder = nil
 	c.turnCompleted = false
 	c.setActiveTurnID("")
+	// A warm client serves several turns; each reports only its own denials.
+	c.permissionDenials.reset()
 
 	c.turnErrorMu.Lock()
 	c.turnError = ""
