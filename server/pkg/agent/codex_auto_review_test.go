@@ -19,7 +19,6 @@ func TestCodexAutoReviewDeclinesApprovalRequests(t *testing.T) {
 		{"item/fileChange/requestApproval", `{"reason":"write outside workspace"}`, map[string]any{"decision": "decline"}},
 		{"execCommandApproval", `{"command":["rm","-rf","/"]}`, map[string]any{"decision": map[string]any{"denied": map[string]any{"rejection": codexAutoReviewRejection}}}},
 		{"item/permissions/requestApproval", `{"permissions":{"network":{"enabled":true}}}`, map[string]any{"permissions": map[string]any{}, "scope": "turn"}},
-		{"mcpServer/elicitation/request", `{}`, map[string]any{"action": "decline", "content": nil, "_meta": nil}},
 	}
 	for i, tc := range cases {
 		c, fs, _ := newTestCodexClient(t)
@@ -58,6 +57,23 @@ func TestCodexAutoReviewRecordsDeclinedCommand(t *testing.T) {
 	}
 }
 
+func TestCodexAutoReviewLeavesMCPElicitationOnRegularPath(t *testing.T) {
+	t.Parallel()
+	c, fs, _ := newTestCodexClient(t)
+	c.autoReview = true
+	c.handleLine(`{"jsonrpc":"2.0","id":3,"method":"mcpServer/elicitation/request","params":{}}`)
+
+	var resp struct {
+		Result map[string]any `json:"result"`
+	}
+	if lines := fs.Lines(); len(lines) != 1 || json.Unmarshal([]byte(lines[0]), &resp) != nil || resp.Result["action"] != "accept" {
+		t.Fatalf("elicitation response = %v, want the regular accept", fs.Lines())
+	}
+	if got := c.permissionDenials.snapshot(); got != nil {
+		t.Fatalf("an elicitation is not a permission denial, got %+v", got)
+	}
+}
+
 func TestFilterCodexApprovalConfigOverrides(t *testing.T) {
 	t.Parallel()
 
@@ -68,9 +84,11 @@ func TestFilterCodexApprovalConfigOverrides(t *testing.T) {
 		"-c", "sandbox_workspace_write.network_access=false",
 		"-c", "profiles.fast.approvals_reviewer=user",
 		"-c", "approval_policy_note=keep", // different key, same prefix
+		"-c", "profile=fast",
+		"-c", "profiles.fast.model=gpt-5.6-mini",
 	}
 	got := filterCodexApprovalConfigOverrides(args, slog.Default())
-	want := []string{"-c", "model=gpt-5.6-sol", "-c", "approval_policy_note=keep"}
+	want := []string{"-c", "model=gpt-5.6-sol", "-c", "approval_policy_note=keep", "-c", "profiles.fast.model=gpt-5.6-mini"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("filtered = %q, want %q", got, want)
 	}

@@ -294,6 +294,9 @@ func prepareCodexHomeWithOpts(codexHome string, opts CodexHomeOptions, logger *s
 		if policy, err = codexAutoReviewPolicy(opts.GOOS, winState); err != nil {
 			return err
 		}
+		// The auto-review policy skips the macOS network version gate; the
+		// version makes a sandbox network failure on an older Codex traceable.
+		logger.Info("codex sandbox: auto review enabled", "codex_version", opts.CodexVersion, "config_path", configFile)
 	}
 	if err := ensureCodexSandboxConfig(configFile, policy, opts.CodexVersion, logger); err != nil {
 		// The managed block is the authoritative on-disk sandbox policy. If it

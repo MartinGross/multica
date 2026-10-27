@@ -532,9 +532,10 @@ func filterCodexCustomConfigOverrides(args []string, logger *slog.Logger) []stri
 
 // codexManagedApprovalConfigKeyRe matches the sandbox and approval keys the
 // daemon owns in auto-review mode, at the root or under a profile.
+// `profile` itself is blocked too: selecting a profile overrides the root.
 var codexManagedApprovalConfigKeyRe = regexp.MustCompile(
-	`^\s*(?:profiles\s*\.\s*` + codexProfileNameKeyPattern + `\s*\.\s*)?` +
-		`(?:approval_policy|approvals_reviewer|sandbox_mode|sandbox_workspace_write)\s*(?:\.|=|$)`)
+	`^\s*(?:profile\s*(?:=|$)|(?:profiles\s*\.\s*` + codexProfileNameKeyPattern + `\s*\.\s*)?` +
+		`(?:approval_policy|approvals_reviewer|sandbox_mode|sandbox_workspace_write)\s*(?:\.|=|$))`)
 
 // filterCodexApprovalConfigOverrides drops `-c` overrides that would loosen
 // the auto-review sandbox; `-c` wins over config.toml from any argv position.
@@ -2983,9 +2984,9 @@ func (c *codexClient) declineServerRequest(id int, method string, params json.Ra
 		}})
 	case "item/permissions/requestApproval":
 		c.respond(id, map[string]any{"permissions": map[string]any{}, "scope": "turn"})
-	case "mcpServer/elicitation/request":
-		c.respond(id, map[string]any{"action": "decline", "content": nil, "_meta": nil})
 	default:
+		// MCP elicitations ask for user input, not for permission, and stay
+		// on the regular path.
 		return false
 	}
 	c.permissionDenials.recordDeclined(method, params)
